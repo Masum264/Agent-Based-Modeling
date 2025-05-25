@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Lifestyle of Bangladeshi University Students (weekdays)</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Arial', sans-serif;
+            background-color: #E6F3FF; /* Light navy blue */
+            color: #333;
+            overflow: hidden;
+        }
+        #visualization {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        .time {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 36px;
+            font-weight: bold;
+            color: #000080; /* Deep navy */
+        }
+        .prompt {
+            position: absolute;
+            top: 120px;
+            left: 20px;
+            max-width: 400px;
+            font-size: 20px;
+            font-weight: bold;
+            background-color: #f1c40f;
+            color: #2c3e50;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            animation: fadeIn 1s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .controls {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            display: flex;
+            align-items: center;
+        }
+        .controls button {
+            background-color: #000080; /* Deep navy */
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+        .controls input[type="range"] {
+            width: 150px;
+        }
+        .activityLabel {
+            font-size: 13px;
+            font-weight: bolder;
+            fill: #333;
+            paint-order: stroke;
+            stroke: #fff;
+            stroke-width: 3px;
+            stroke-linecap: butt;
+            stroke-linejoin: miter;
+        }
+        .node {
+            transition: all 0.3s ease;
+        }
+</style>
+</head>
+<body>
+    <div id="visualization">
+        <div class="title">Daily Lifestyle of Bangladeshi University Students (weekdays)</div>
+    </div>
+    <div class="time"></div>
+    <div class="prompt"></div> <!-- Added prompt div -->
+    <div class="controls">
+        <button id="playPause">Play</button>
+        <button onclick="window.location.href='activity_visualization_2.html'">Weekend</button>
+        <input type="range" id="speed" min="0.5" max="10" step="0.5" value="3">
+        <span id="speedValue">Speed: 3</span>
+    </div>
+
+    <script>
+        // Load and process the data
+        d3.csv('Weekdays.csv').then(data => {
+            const timeColumns = data.columns.slice(5, -3);
+
+            // Combine "Traveling" and "Travelling"
+            const activities = [...new Set(data.flatMap(d =>
+                timeColumns.map(col => d[col] === "Traveling" ? "Travelling" : d[col])
+            ))];
+
+            const processedData = data.map((d, i) => ({
+                id: i,
+                activities: timeColumns.map(time => ({
+                    time,
+                    activity: d[time] === "Traveling" ? "Travelling" : d[time]
+                }))
+            }));
+
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            const radius = Math.min(width, height) * 0.45;
+
+            // Create color scale
+            const color = d3.scaleOrdinal(d3.schemeCategory10).domain(activities);
+
+            // Create SVG
+            const svg = d3.select('#visualization')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height)
+                .append('g')
+                .attr('transform', `translate(${width/2},${height/2})`);
+
+            // Add a background circle
+            svg.append('circle')
+                .attr('r', radius)
+                .attr('fill', '#ecf0f1')
+                .attr('stroke', '#bdc3c7')
+                .attr('stroke-width', 2);
+
+            // Create circular layout
+            const activityPositions = {};
+            const angleStep = (2 * Math.PI) / activities.length;
+            activities.forEach((activity, i) => {
+                const angle = i * angleStep;
+                activityPositions[activity] = {
+                    x: radius * 0.75 * Math.cos(angle),
+                    y: radius * 0.75 * Math.sin(angle),
+                    angle: angle
+                };
+            });
+
+            // Function to get a position within a compact cluster
+            function getPositionInCluster(activity, index, total) {
+                const pos = activityPositions[activity];
+                const clusterRadius = Math.sqrt(total) * 1.5;
+                const angle = index * (2 * Math.PI / total);
+                const r = clusterRadius * Math.sqrt(Math.random());
+                return {
+                    x: pos.x + r * Math.cos(angle),
+                    y: pos.y + r * Math.sin(angle)
+                };
+            }
+
+            // Create activity labels
+            svg.selectAll('.activityLabel')
+                .data(activities)
+                .enter()
+                .append('text')
+                .attr('class', 'activityLabel')
+                .attr('x', d => activityPositions[d].x * 1.2)
+                .attr('y', d => activityPositions[d].y * 1.2)
+                .attr('text-anchor', d => {
+                    const angle = activityPositions[d].angle;
+                    if (angle > Math.PI / 2 && angle < 3 * Math.PI / 2) return 'end';
+                    return 'start';
+                })
+                .attr('alignment-baseline', 'middle')
+                .text(d => d)
+                .attr('fill', d => color(d));
+
+            // Create nodes (one for each person)
+            const nodes = svg.selectAll('.node')
+                .data(processedData)
+                .enter()
+                .append('circle')
+                .attr('class', 'node')
+                .attr('r', 3)
+                .attr('fill', d => color(d.activities[0].activity));
+
+            // Create time display
+            const timeDisplay = d3.select('.time');
+
+            // Animation variables
+            let currentTimeIndex = 0;
+            let animationSpeed = 3000;
+            let animationPaused = true;
+
+            // Function to generate time-based prompts
+            function getPrompt(activityCounts) {
+                const totalPeople = processedData.length;
+                let prompt = "";
+
+                // Conditions based on activity percentages
+                const classPercentage = (activityCounts['University Class'] || 0) / totalPeople * 100;
+                const sleepPercentage = (activityCounts['Sleeping'] || 0) / totalPeople * 100;
+                const studyPercentage = (activityCounts['Study'] || 0) / totalPeople * 100;
+                const socializingPercentage = (activityCounts['Socializing'] || 0) / totalPeople * 100;
+                const exercisePercentage = (activityCounts['Exercise'] || 0) / totalPeople * 100;
+
+                if (classPercentage > 30) {
+                    prompt = "It's peak time for university classes!";
+                } else if (studyPercentage > 30) {
+                    prompt = "Students are heavily engaged in study right now.";
+                } else if (sleepPercentage > 50) {
+                    prompt = "Most students are still asleep. Early morning rest is important!";
+                } else if (socializingPercentage > 20) {
+                    prompt = "Students are spending time socializing and interacting with friends.";
+                } else if (exercisePercentage > 10) {
+                    prompt = "Exercise is in full swing! Many students are staying active.";
+                } else {
+                    prompt = "Various activities are happening at this moment.";
+                }
+
+                return prompt;
+            }
+
+            function updatePositions() {
+                const currentTime = timeColumns[currentTimeIndex];
+                timeDisplay.text(currentTime);
+
+                // Count activities for this time step
+                const activityCounts = {};
+                processedData.forEach(d => {
+                    const activity = d.activities[currentTimeIndex].activity;
+                    activityCounts[activity] = (activityCounts[activity] || 0) + 1;
+                });
+
+                // Generate and display prompt
+                const prompt = getPrompt(activityCounts);
+                d3.select('.prompt').text(prompt);
+
+                // Create index counters for each activity
+                const activityIndices = {};
+                activities.forEach(activity => activityIndices[activity] = 0);
+
+                nodes.transition()
+                    .duration(animationSpeed)
+                    .attr('cx', d => {
+                        const activity = d.activities[currentTimeIndex].activity;
+                        const index = activityIndices[activity]++;
+                        return getPositionInCluster(activity, index, activityCounts[activity]).x;
+                    })
+                    .attr('cy', d => {
+                        const activity = d.activities[currentTimeIndex].activity;
+                        const index = activityIndices[activity]++;
+                        return getPositionInCluster(activity, index, activityCounts[activity]).y;
+                    })
+                    .attr('fill', d => color(d.activities[currentTimeIndex].activity));
+
+                const totalPeople = processedData.length;
+
+                svg.selectAll('.activityLabel')
+                    .text(d => {
+                        const count = activityCounts[d] || 0;
+                        const percentage = (count / totalPeople * 100).toFixed(1);
+                        return `${d} (${percentage}%)`;
+                    })
+                    .transition()
+                    .duration(animationSpeed)
+                    .attr('font-size', d => {
+                        const count = activityCounts[d] || 0;
+                        return `${Math.max(13, Math.sqrt(count) * 1.5)}px`;
+                    })
+                    .attr('opacity', d => {
+                        const count = activityCounts[d] || 0;
+                        return count > 0 ? 1 : 0.3;
+                    });
+            }
+
+            function animate() {
+                if (animationPaused) return;
+
+                updatePositions();
+
+                currentTimeIndex = (currentTimeIndex + 1) % timeColumns.length;
+                setTimeout(animate, animationSpeed);
+            }
+
+            // Controls
+            d3.select('#playPause').on('click', function() {
+                animationPaused = !animationPaused;
+                if (animationPaused) {
+                    d3.select(this).text('Play');  // Change button text to 'Play'
+                } else {
+                    d3.select(this).text('Pause'); // Change button text to 'Pause'
+                    animate(); // Start the animation
+                }
+            });
+
+            d3.select('#speed').on('input', function() {
+                const speedValue = +this.value;
+                animationSpeed = 6000 / speedValue;
+                d3.select('#speedValue').text(`Speed: ${speedValue}`);
+            });
+
+            // Initial update
+            updatePositions();
+        });
+    </script>
+</body>
+</html>
